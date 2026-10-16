@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="./Public/css/style.css">
+    <title>Painel de Agendamentos</title>
+</head>
+<body>
+    <script>
+        if(localStorage.getItem('logged') !== 'true') window.location.href = 'login.html';
+    </script>
+
+    <header>
+        <h2>Meus Agendamentos (Firebase)</h2>
+        <button onclick="logout()" style="background: #EF4444;">Sair</button>
+    </header>
+    
+    <div class="layout">
+        <aside class="sidebar">
+            <button onclick="openModal()">+ Novo Agendamento</button>
+        </aside>
+        <main class="main-content">
+            <h3>Agendamentos da Semana</h3><br>
+            <div id="appointments-list">Carregando agendamentos...</div>
+        </main>
+    </div>
+
+    <div id="new-appointment-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Novo Agendamento</h3><br>
+            <form id="appointment-form">
+                <input type="text" id="app-title" placeholder="Título da Aula" required>
+                <input type="date" id="app-date" required>
+                <input type="time" id="app-time" required>
+                <select id="app-duration">
+                    <option value="60">1 hora</option>
+                    <option value="90">1h 30min</option>
+                </select>
+                <select id="app-recurrence">
+                    <option value="0">Não se repete</option>
+                    <option value="1">Repetir +1 semana</option>
+                    <option value="2">Repetir +2 semanas</option>
+                </select>
+                <textarea id="app-notes" placeholder="Observações"></textarea>
+                <button type="submit">Salvar</button>
+                <button type="button" onclick="closeModal()" style="background:#9CA3AF;">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // 📋 COLE AQUI AS CONFIGURAÇÕES QUE VOCÊ COPIOU DO SEU CONSOLE DO FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyD0_83loxFCBfr37sQbom2OaZFLReEvdB0",
+            authDomain: "like-4a1fc.firebaseapp.com",
+            projectId: "like-4a1fc",
+            storageBucket: "like-4a1fc.firebasestorage.app",
+            messagingSenderId: "433152412600",
+            appId: "1:433152412600:web:fd0a2cf854ea6264d75d4d",
+            measurementId: "G-HJ0YBEXTFV"
+        };
+
+        // Inicializa o Firebase e o Banco de Dados Firestore
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Tornar funções disponíveis globalmente nos botões do HTML
+        window.closeModal = () => document.getElementById('new-appointment-modal').classList.remove('active');
+        window.openModal = () => document.getElementById('new-appointment-modal').classList.add('active');
+        window.logout = () => { localStorage.removeItem('logged'); window.location.href = 'login.html'; };
+
+        // --- SALVAR NO BANCO ---
+        document.getElementById('appointment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const title = document.getElementById('app-title').value;
+            const date = document.getElementById('app-date').value;
+            const time = document.getElementById('app-time').value;
+            const duration = document.getElementById('app-duration').value;
+            const recurrenceWeeks = parseInt(document.getElementById('app-recurrence').value);
+            const notes = document.getElementById('app-notes').value;
+
+            let baseDate = new Date(date + "T00:00:00");
+
+            try {
+                // Loop para criar as recorrências direto no Firestore
+                for (let i = 0; i <= recurrenceWeeks; i++) {
+                    let appointmentDate = new Date(baseDate);
+                    appointmentDate.setDate(appointmentDate.getDate() + (i * 7));
+
+                    // Salva um documento na coleção 'agendamentos' do Firebase
+                    await addDoc(collection(db, "agendamentos"), {
+                        title: title,
+                        date: appointmentDate.toISOString().split('T')[0],
+                        time: time,
+                        duration: duration,
+                        notes: notes
+                    });
+                }
+
+                closeModal();
+                document.getElementById('appointment-form').reset();
+                renderAppointments();
+            } catch (error) {
+                console.error("Erro ao salvar: ", error);
+            }
+        });
+
+        // --- BUSCAR E EXIBIR DO BANCO ---
+        async function renderAppointments() {
+            const listContainer = document.getElementById('appointments-list');
+            listContainer.innerHTML = '';
+
+            // Puxa todos os documentos da coleção 'agendamentos'
+            const querySnapshot = await getDocs(collection(db, "agendamentos"));
+            let appointments = [];
+            
+            querySnapshot.forEach((doc) => {
+                appointments.push({ id: doc.id, ...doc.data() });
+            });
+
+            // Ordena por data e hora cronológica
+            appointments.sort((a, b) => new Date(a.date + "T" + a.time) - new Date(b.date + "T" + b.time));
+
+            if (appointments.length === 0) {
+                listContainer.innerHTML = '<p>Nenhum agendamento encontrado.</p>';
+                return;
+            }
+
+            appointments.forEach(app => {
+                const div = document.createElement('div');
+                div.className = 'appointment-card';
+                div.innerHTML = `
+                    <div>
+                        <h4>${app.title}</h4>
+                        <p>Data: ${app.date.split('-').reverse().join('/')} às ${app.time} (${app.duration} min)</p>
+                        ${app.notes ? `<p><strong>Obs:</strong> ${app.notes}</p>` : ''}
+                    </div>
+                    <button class="btn-delete" data-id="${app.id}" style="background:transparent; color:#EF4444; cursor:pointer;">🗑️</button>
+                `;
+                listContainer.appendChild(div);
+            });
+
+            // Adiciona evento de clique nos botões de excluir
+            document.querySelectorAll('.btn-delete').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const id = e.target.getAttribute('data-id');
+                    if (confirm('Deseja excluir este agendamento?')) {
+                        await deleteDoc(doc(db, "agendamentos", id));
+                        renderAppointments();
+                    }
+                });
+            });
+        }
+
+        // Executa a busca assim que a página abre
+        renderAppointments();
+    </script>
+</body>
+</html>

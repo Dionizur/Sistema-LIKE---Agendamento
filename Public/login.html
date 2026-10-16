@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="css/style.css">
+    <title>Login - Agenda</title>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="box">
+            <h2>Acesso ao Sistema</h2><br>
+            <form id="login-form">
+                <label>Usuário:</label>
+                <input type="text" id="username" required placeholder="admin">
+                <label>Senha:</label>
+                <input type="password" id="password" required placeholder="admin">
+                <button type="submit" style="width: 100%;">Entrar</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+
+            if (user === 'admin' && pass === 'admin') {
+                localStorage.setItem('logged', 'true');
+                window.location.href = '../dashboard.html';
+            } else {
+                alert('Usuário ou senha inválidos!');
+            }
+        });
+    </script>
+</body>
+</html>
