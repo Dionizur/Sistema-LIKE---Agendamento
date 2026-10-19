@@ -62,3 +62,30 @@ test('Agenda carrega além do primeiro lote de registros',async()=>{
   };
   assert.equal((await remote.load()).appointments.length,501);
 });
+
+test('Recorrência semanal inclui a data final e atravessa meses',()=>{
+  const rows=db.weeklyRecords({student:'Recorrente',starts_at:'2026-10-26T11:00:00Z'},'2026-11-09');
+  assert.equal(rows.length,3);assert.equal(rows[2].starts_at,'2026-11-09T11:00:00.000Z');
+  assert.equal(new Set(rows.map(r=>r.series_id)).size,1);
+  assert.equal(new Set(rows.map(r=>r.id)).size,3);
+  assert.throws(()=>db.weeklyRecords(rows[0],'2026-10-25'),/data final/);
+  assert.throws(()=>db.weeklyRecords(rows[0],'2030-01-01'),/104/);
+});
+test('Alteração da sequência desloca todas as datas e preserva outras aulas',()=>{
+  const rows=db.weeklyRecords({student:'Sequência',starts_at:'2026-10-26T11:00:00Z'},'2026-11-09');
+  const updated=db.sequenceChanges([...rows,{id:'unrelated'}],rows[1],{student:'Editado',starts_at:'2026-11-03T12:00:00Z'});
+  assert.equal(updated.length,3);assert.equal(updated[0].starts_at,'2026-10-27T12:00:00.000Z');
+  assert.equal(updated[2].id,rows[2].id);assert.equal(updated[2].student,'Editado');
+});
+test('Sequência local é atômica em conflitos e pode ser excluída por vínculo',async()=>{
+  const rows=db.weeklyRecords({student:'Aluno Recorrente',teacher_id:'teacher',duration:60,starts_at:'2026-12-01T11:00:00Z'},'2026-12-15');
+  await db.saveAppointments(rows);
+  const before=JSON.stringify(await db.load());
+  await assert.rejects(db.saveAppointments(db.weeklyRecords({...rows[0]},'2026-12-15')),/já está agendado/);
+  assert.equal(JSON.stringify(await db.load()),before);
+  const changed=db.sequenceChanges(rows,rows[0],{...rows[0],starts_at:'2026-12-08T11:00:00Z'});
+  await db.saveAppointments(changed,true);
+  assert.equal((await db.load()).appointments.filter(a=>a.series_id===rows[0].series_id).length,3);
+  await db.removeSequence(rows[0].series_id);
+  assert.equal((await db.load()).appointments.filter(a=>a.series_id===rows[0].series_id).length,0);
+});

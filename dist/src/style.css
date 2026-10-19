@@ -14,3 +14,5 @@
 .sidebar-note h3{font-size:19px}
 .quote em{font-size:16px}
 @media(max-width:760px){.sidebar .brand-wordmark{width:88px;margin:0}.sidebar .brand-name{font-size:38px}.sidebar .brand-subtitle{font-size:12px;margin-top:2px}.login-art .brand-wordmark{width:150px}.login-art .brand-name{font-size:58px}.login-art .brand-subtitle{font-size:19px}.login-art{gap:20px}.login-art h1{font-size:30px;margin-top:10px}.login-art .eyebrow{margin-top:10px}}
+
+.recurrence{border:1px solid #dbe3ed;border-radius:12px;padding:16px;margin:18px 0}.recurrence legend{font-weight:700;padding:0 6px}.recurrence [hidden]{display:none}.series-info{background:#eef5fc;border-radius:10px;padding:12px;line-height:1.5}dialog{max-height:90vh;overflow-y:auto}

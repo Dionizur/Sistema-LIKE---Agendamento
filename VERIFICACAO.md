@@ -34,3 +34,9 @@ node scripts/check-public-access.mjs
 ```
 
 O último comando usa a rede e verifica o projeto configurado em config.js. Os testes automatizados usam dados locais ou respostas simuladas e não gravam no Supabase.
+
+## Recorrência — publicação em 19/10/2026
+
+- Migração `003_recurring_appointments.sql` aplicada ao Supabase de produção.
+- Teste transacional sob a função `authenticated`, com identidade de funcionário autorizado, confirmou criação de três aulas, deslocamento da sequência em uma semana, preservação de `created_by`, rejeição de duplicidade com atomicidade, edição individual e exclusão por sequência. Todo o teste foi encerrado com rollback.
+- `npm run check`, `npm test` (10 testes) e `npm run build` concluídos com sucesso.

@@ -44,3 +44,30 @@ export async function save(table,record,id) {
   const data=local();if(id) data[table]=data[table].map(row=>row.id===id?{...row,...record}:row);else data[table].push({...record,id:crypto.randomUUID()});localStorage.setItem(demoKey,JSON.stringify(data));
 }
 export async function remove(table,id) {if(connected) return request(`/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`,{method:'DELETE'});const data=local();data[table]=data[table].filter(row=>row.id!==id);localStorage.setItem(demoKey,JSON.stringify(data));}
+
+// Calendar arithmetic uses Brasília dates, independently of the device timezone.
+export function weeklyRecords(record, until) {
+  const first=new Date(record.starts_at), end=new Date(until+'T23:59:59-03:00');
+  if(!Number.isFinite(end.getTime()) || end<first) throw Error('Escolha uma data final igual ou posterior à primeira aula.');
+  const count=Math.floor((end-first)/(7*86400000))+1;
+  if(count>104) throw Error('Programe no máximo 104 aulas por sequência.');
+  const series_id=crypto.randomUUID();
+  return Array.from({length:count},(_,i)=>({...record,id:crypto.randomUUID(),series_id,starts_at:new Date(first.getTime()+i*7*86400000).toISOString()}));
+}
+export function sequenceChanges(rows, original, record) {
+  const delta=new Date(record.starts_at)-new Date(original.starts_at);
+  return rows.filter(row=>row.series_id===original.series_id).map(row=>({...record,id:row.id,series_id:original.series_id,starts_at:new Date(new Date(row.starts_at).getTime()+delta).toISOString()}));
+}
+export async function saveAppointments(records, editing=false) {
+  if(connected) return request('/rest/v1/rpc/save_appointment_sequence',{method:'POST',body:JSON.stringify({records,editing})});
+  const data=local(), ids=new Set(records.map(r=>r.id));
+  if(editing && records.some(r=>!data.appointments.some(a=>a.id===r.id))) throw Error('A agenda mudou. Atualize e tente novamente.');
+  const next=[...data.appointments.filter(r=>!editing||!ids.has(r.id)),...records];
+  const keys=new Set();
+  for(const row of next){const key=row.student.trim().toLocaleLowerCase()+'|'+new Date(row.starts_at).toISOString();if(keys.has(key))throw Error('Este aluno já está agendado nesse horário. Nenhuma aula foi salva.');keys.add(key);}
+  data.appointments=next;localStorage.setItem(demoKey,JSON.stringify(data));
+}
+export async function removeSequence(seriesId) {
+  if(connected) return request('/rest/v1/appointments?series_id=eq.'+encodeURIComponent(seriesId),{method:'DELETE'});
+  const data=local();data.appointments=data.appointments.filter(a=>a.series_id!==seriesId);localStorage.setItem(demoKey,JSON.stringify(data));
+}

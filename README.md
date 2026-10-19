@@ -29,7 +29,7 @@ Importe este repositório no Netlify. O arquivo `netlify.toml` já define Node.j
 
 O build usa a configuração pública de `config.js`. Para substituí-la no Netlify, defina `SUPABASE_URL` e `SUPABASE_ANON_KEY` (chave pública publishable). O build gera `dist/config.js`. Execute um novo deploy após qualquer alteração. Configure a URL de produção como Site URL no Supabase Auth.
 
-O Supabase e as tabelas já foram criados, com a primeira funcionária autorizada. O cadastro público está desabilitado. O deploy no Netlify ainda não foi executado. Esta pasta ainda não tem repositório Git ou remoto configurados.
+O Supabase e as tabelas já foram criados, com a primeira funcionária autorizada. O cadastro público está desabilitado. O site de produção é https://likeagenda.netlify.app e o Netlify acompanha o repositório Dionizur/Sistema-LIKE---Agendamento.
 
 Para deploy manual, envie o conteúdo de `dist` ao Netlify. Para deploy por Git, envie o código ao repositório escolhido e importe-o no Netlify. A chave publishable é destinada ao navegador; a proteção dos dados é feita por autenticação e RLS. Nunca adicione senhas, tokens pessoais, chaves secret/service_role ou arquivos `.env` ao Git. Capturas de tela e scripts locais com dados pessoais estão excluídos pelo `.gitignore`.
 
@@ -44,3 +44,9 @@ Os arquivos antigos `Server.js`, `dashboard.html` e `Public/login.html` são leg
 ## Verificação
 
 `npm run check` verifica a sintaxe dos módulos. `npm run build` gera a versão estática. Para verificar o build, execute `node scripts/serve.mjs --dist`. A revisão já verificou o login real da primeira funcionária, a agenda no navegador e as operações no banco em teste transacional com rollback. `node scripts/check-public-access.mjs` verifica o bloqueio de leitura anônima e as opções públicas de autenticação. Veja `VERIFICACAO.md` para o escopo dos testes.
+
+## Alunos com horário fixo
+
+Antes de usar esta versão, execute `supabase/003_recurring_appointments.sql` no SQL Editor do Supabase (também após criar um banco novo com `schema.sql`). A migração preserva as aulas existentes e adiciona a identificação de sequência e o salvamento transacional. Depois, publique novamente a pasta `dist`.
+
+Em Agendar aula, selecione “Toda semana, no mesmo dia e horário” e informe a data final (inclusive, até 104 aulas). A prévia informa a quantidade. O símbolo ↻ identifica aulas da sequência. Ao editar, escolha “Só esta aula” ou “Toda a sequência”, que inclui aulas anteriores. Mudar a data desloca as datas da sequência pelo mesmo intervalo. Uma alteração individual mantém o vínculo com a sequência. A exclusão também permite escolher o alcance. Se houver duplicidade, nenhuma alteração da sequência é salva.
