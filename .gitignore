@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+supabase/*.png
+preview*.log
+*.zip
+supabase/002_keila.sql
+supabase/verify.sql
+
+.qa/
+
+.deploy-repo/

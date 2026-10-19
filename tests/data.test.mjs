@@ -7,18 +7,18 @@ globalThis.sessionStorage=storage();
 const db=await import('../src/data.js');
 test('Cadastro, edição e inativação de professor preservam o histórico da aula',async()=>{
   await db.save('teachers',{name:'Professora Teste',specialty:'Pilates',active:true});
-  let data=await db.load();const teacher=data.teachers[0];
+  let data=await db.load('2026-10-01','2026-10-31');const teacher=data.teachers[0];
   await db.save('appointments',{teacher_id:teacher.id,student:'Aluno Teste',starts_at:'2026-10-16T11:00:00Z',duration:60,notes:'Adaptação de exercício'});
   await db.save('teachers',{name:'Professora Editada',active:false},teacher.id);
-  data=await db.load();assert.equal(data.teachers[0].active,false);assert.equal(data.appointments[0].teacher_id,teacher.id);assert.equal(data.appointments[0].notes,'Adaptação de exercício');
+  data=await db.load('2026-10-01','2026-10-31');assert.equal(data.teachers[0].active,false);assert.equal(data.appointments[0].teacher_id,teacher.id);assert.equal(data.appointments[0].notes,'Adaptação de exercício');
 });
 test('Edição e exclusão de aula atingem somente o agendamento escolhido',async()=>{
-  const {appointments}=await db.load();const id=appointments[0].id;
+  const {appointments}=await db.load('2026-10-01','2026-10-31');const id=appointments[0].id;
   await db.save('appointments',{student:'Outro Aluno',duration:45},id);
-  assert.equal((await db.load()).appointments[0].duration,45);
+  assert.equal((await db.load('2026-10-01','2026-10-31')).appointments[0].duration,45);
   await db.remove('appointments',id);
-  assert.equal((await db.load()).appointments.length,0);
-  assert.equal((await db.load()).teachers.length,1);
+  assert.equal((await db.load('2026-10-01','2026-10-31')).appointments.length,0);
+  assert.equal((await db.load('2026-10-01','2026-10-31')).teachers.length,1);
 });
 test('Login usa autenticação real e verifica autorização de funcionário',async()=>{
   window.LIKE_CONFIG={supabaseUrl:'https://example.supabase.co',supabaseKey:'public-test'};
@@ -52,40 +52,78 @@ test('Sessão revogada é removida quando o servidor responde 401',async()=>{
   globalThis.fetch=async()=>new Response(JSON.stringify({message:'JWT invalid'}),{status:401});
   await assert.rejects(remote.load(),/sessão expirou/);assert.equal(remote.user(),undefined);
 });
-test('Agenda carrega além do primeiro lote de registros',async()=>{
+test('Professores carregam além do primeiro lote de registros',async()=>{
   sessionStorage.setItem('like-session',JSON.stringify({access_token:'valid',expires_at:Date.now()/1000+3600,user:{id:'staff-id'}}));
   const remote=await import('../src/data.js?pagination');
   globalThis.fetch=async url=>{
     if(url.includes('/staff?'))return new Response(JSON.stringify([{user_id:'staff-id'}]));
-    const rows=url.includes('/appointments?')?(url.includes('offset=0')?Array.from({length:500},(_,id)=>({id})): [{id:500}]):[];
+    const rows=url.includes('/teachers?')?(url.includes('offset=0')?Array.from({length:500},(_,id)=>({id})): [{id:500}]):[];
     return new Response(JSON.stringify(rows));
   };
-  assert.equal((await remote.load()).appointments.length,501);
+  assert.equal((await remote.load()).teachers.length,501);
 });
 
-test('Recorrência semanal inclui a data final e atravessa meses',()=>{
-  const rows=db.weeklyRecords({student:'Recorrente',starts_at:'2026-10-26T11:00:00Z'},'2026-11-09');
-  assert.equal(rows.length,3);assert.equal(rows[2].starts_at,'2026-11-09T11:00:00.000Z');
-  assert.equal(new Set(rows.map(r=>r.series_id)).size,1);
-  assert.equal(new Set(rows.map(r=>r.id)).size,3);
-  assert.throws(()=>db.weeklyRecords(rows[0],'2026-10-25'),/data final/);
-  assert.throws(()=>db.weeklyRecords(rows[0],'2030-01-01'),/104/);
+
+const raw=()=>JSON.parse(localStorage.getItem('like-demo-v1'));
+const reset=()=>localStorage.setItem('like-demo-v1',JSON.stringify({teachers:[],appointments:[],schedule:[],series:[],events:[]}));
+const lesson=(teacher,starts='2020-01-06T11:00:00Z',extra={})=>({student:'Aluno Fixo',teacher_id:teacher,starts_at:starts,duration:60,notes:'',change_reason:'',...extra});
+test('Dias fixos sugerem somente professores ativos e não permitem duplicar o dia',async()=>{
+  reset();await db.saveTeacher({name:'Keila',active:true},[3,5]);
+  const data=await db.load(),teacher=data.teachers[0];
+  assert.equal(db.teacherForDate(data.teachers,data.schedule,'2026-10-21').id,teacher.id);
+  assert.equal(db.teacherForDate(data.teachers,data.schedule,'2026-10-20'),undefined);
+  await assert.rejects(db.saveTeacher({name:'Outra',active:true},[3]),/já possui/);
+  assert.equal(raw().teachers.length,1);
+  await db.saveTeacher({name:'Keila',active:false},[3,5],teacher.id);
+  const inactive=await db.load();assert.equal(db.teacherForDate(inactive.teachers,inactive.schedule,'2026-10-21'),undefined);
 });
-test('Alteração da sequência desloca todas as datas e preserva outras aulas',()=>{
-  const rows=db.weeklyRecords({student:'Sequência',starts_at:'2026-10-26T11:00:00Z'},'2026-11-09');
-  const updated=db.sequenceChanges([...rows,{id:'unrelated'}],rows[1],{student:'Editado',starts_at:'2026-11-03T12:00:00Z'});
-  assert.equal(updated.length,3);assert.equal(updated[0].starts_at,'2026-10-27T12:00:00.000Z');
-  assert.equal(updated[2].id,rows[2].id);assert.equal(updated[2].student,'Editado');
+test('Recorrência não possui data final e não grava milhares de aulas',async()=>{
+  reset();await db.saveTeacher({name:'Professora',active:true},[]);const teacher=raw().teachers[0];
+  await db.updateAppointment(lesson(teacher.id,undefined,{repeat:'weekly'}));
+  assert.equal(raw().appointments.length,1);assert.equal(raw().series.length,1);
+  const future=await db.load('2040-01-01','2040-01-31');
+  assert.equal(future.appointments.length,5);assert.ok(future.appointments.every(a=>a.virtual));
+  assert.equal(raw().appointments.length,1);
 });
-test('Sequência local é atômica em conflitos e pode ser excluída por vínculo',async()=>{
-  const rows=db.weeklyRecords({student:'Aluno Recorrente',teacher_id:'teacher',duration:60,starts_at:'2026-12-01T11:00:00Z'},'2026-12-15');
-  await db.saveAppointments(rows);
-  const before=JSON.stringify(await db.load());
-  await assert.rejects(db.saveAppointments(db.weeklyRecords({...rows[0]},'2026-12-15')),/já está agendado/);
-  assert.equal(JSON.stringify(await db.load()),before);
-  const changed=db.sequenceChanges(rows,rows[0],{...rows[0],starts_at:'2026-12-08T11:00:00Z'});
-  await db.saveAppointments(changed,true);
-  assert.equal((await db.load()).appointments.filter(a=>a.series_id===rows[0].series_id).length,3);
-  await db.removeSequence(rows[0].series_id);
-  assert.equal((await db.load()).appointments.filter(a=>a.series_id===rows[0].series_id).length,0);
+test('Desmarcar ocorrência virtual não a recria e não interrompe a sequência',async()=>{
+  const week=await db.load('2020-01-13','2020-01-19'),a=week.appointments[0];
+  await db.setAppointmentStatus(a,'canceled','Viagem');
+  const same=await db.load('2020-01-13','2020-01-19');
+  assert.equal(same.appointments.length,1);assert.equal(same.appointments[0].status,'canceled');
+  assert.equal((await db.load('2020-01-20','2020-01-26')).appointments.length,1);
+});
+test('Troca com justificativa e reagendamento aparecem no painel do professor que atendeu',async()=>{
+  await db.saveTeacher({name:'Substituta',active:true},[]);const teacher=raw().teachers[1];
+  const a=(await db.load('2020-01-20','2020-01-26')).appointments[0];
+  await db.updateAppointment(lesson(teacher.id,'2020-01-21T12:00:00Z',{change_reason:'Cobertura de férias'}),a);
+  const edited=(await db.load('2020-01-20','2020-01-26')).appointments[0];
+  await db.setAppointmentStatus(edited,'attended');
+  const report=await db.getReport('2020-01-01','2020-01-31');
+  assert.equal(report.summary.attended,1);assert.equal(report.summary.canceled,1);assert.equal(report.summary.rescheduled,1);
+  assert.equal(report.teachers.find(t=>t.id===teacher.id).attended,1);
+  const currentReport=await db.getReport(db.studioDay(new Date()),db.studioDay(new Date()));
+  assert.ok(currentReport.recent.some(e=>e.reason==='Cobertura de férias'&&e.kind==='teacher_changed'));
+  assert.ok(currentReport.recent.some(e=>e.reason==='Cobertura de férias'&&e.kind==='rescheduled'));
+});
+test('Editar todas preserva atendimentos, cancelamentos e muda semanas distantes',async()=>{
+  const a=(await db.load('2020-01-27','2020-02-02')).appointments[0];
+  await db.updateAppointment(lesson(a.teacher_id,'2020-01-28T11:00:00Z'),a,'all');
+  const jan=await db.load('2020-01-01','2020-01-31');
+  assert.equal(jan.appointments.find(row=>row.status==='attended').starts_at,'2020-01-21T12:00:00Z');
+  assert.equal(jan.appointments.find(row=>row.status==='canceled').starts_at,'2020-01-13T11:00:00.000Z');
+  const distant=await db.load('2040-01-01','2040-01-31');
+  assert.ok(distant.appointments.every(row=>new Date(row.starts_at).getUTCDay()===2));
+  assert.ok(distant.appointments.every(row=>row.rescheduled));
+});
+test('Encerrar sequência impede aulas futuras e preserva o histórico anterior',async()=>{
+  const a=(await db.load('2020-02-01','2020-02-07')).appointments[0];
+  await db.setAppointmentStatus(a,'canceled','Encerramento do plano','all');
+  assert.equal((await db.load('2040-01-01','2040-01-31')).appointments.length,0);
+  assert.equal((await db.getReport('2020-01-01','2020-01-31')).summary.attended,1);
+});
+test('Conflito entre programações é rejeitado sem alteração parcial',async()=>{
+  reset();await db.saveTeacher({name:'Professora',active:true},[]);const teacher=raw().teachers[0];
+  await db.updateAppointment(lesson(teacher.id,undefined,{repeat:'weekly'}));const before=JSON.stringify(raw());
+  await assert.rejects(db.updateAppointment(lesson(teacher.id,'2021-01-04T11:00:00Z',{repeat:'weekly'})),/agendado|sequência/);
+  assert.equal(JSON.stringify(raw()),before);
 });

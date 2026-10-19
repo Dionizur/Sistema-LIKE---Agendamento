@@ -45,8 +45,24 @@ Os arquivos antigos `Server.js`, `dashboard.html` e `Public/login.html` são leg
 
 `npm run check` verifica a sintaxe dos módulos. `npm run build` gera a versão estática. Para verificar o build, execute `node scripts/serve.mjs --dist`. A revisão já verificou o login real da primeira funcionária, a agenda no navegador e as operações no banco em teste transacional com rollback. `node scripts/check-public-access.mjs` verifica o bloqueio de leitura anônima e as opções públicas de autenticação. Veja `VERIFICACAO.md` para o escopo dos testes.
 
-## Alunos com horário fixo
+## Dias fixos e programação semanal
 
-Antes de usar esta versão, execute `supabase/003_recurring_appointments.sql` no SQL Editor do Supabase (também após criar um banco novo com `schema.sql`). A migração preserva as aulas existentes e adiciona a identificação de sequência e o salvamento transacional. Depois, publique novamente a pasta `dist`.
+No cadastro ou edição de professor, marque seus dias fixos. Cada dia possui um responsável padrão. A tela indica os dias reservados por outros professores. Nenhum dia foi atribuído aos professores existentes sem definição da equipe. Professores inativos não são sugeridos.
 
-Em Agendar aula, selecione “Toda semana, no mesmo dia e horário” e informe a data final (inclusive, até 104 aulas). A prévia informa a quantidade. O símbolo ↻ identifica aulas da sequência. Ao editar, escolha “Só esta aula” ou “Toda a sequência”, que inclui aulas anteriores. Mudar a data desloca as datas da sequência pelo mesmo intervalo. Uma alteração individual mantém o vínculo com a sequência. A exclusão também permite escolher o alcance. Se houver duplicidade, nenhuma alteração da sequência é salva.
+Ao agendar, a data seleciona o professor fixo do dia. É possível escolher outro professor e informar uma justificativa opcional. Alterar os dias fixos não modifica aulas já programadas.
+
+Em Repetição, escolha “Toda semana, sem data de término”. A programação é guardada uma única vez; a agenda calcula as ocorrências do período aberto, inclusive em anos futuros. Uma aula só precisa de registro individual ao ser alterada, desmarcada ou atendida. As sequências antigas também continuam sem término.
+
+Ao editar uma sequência, escolha “Só esta aula” ou “Todas as agendadas”. A alteração em conjunto atualiza a programação e as aulas ainda agendadas; atendimentos e desmarcações mantêm os dados históricos. Mudar a data desloca as aulas pelo mesmo intervalo. Uma desmarcação individual não reaparece na próxima atualização. Encerrar a sequência interrompe as próximas ocorrências.
+
+## Painel da equipe
+
+Todo funcionário autorizado tem acesso ao Painel da equipe. O período padrão é o mês atual; há filtros de datas e professor. O painel apresenta aulas atendidas, desmarcadas e reagendadas, os atendimentos por professor e as últimas 30 justificativas registradas no período, com autor, horário e detalhes da troca.
+
+A equipe registra “Marcar como atendida” nos detalhes da aula após seu início. Aulas passadas não são automaticamente consideradas atendidas. Desmarcações preservam o histórico e podem ser reabertas. Aulas reagendadas contam uma vez pela data atual da aula no período, mesmo quando também atendidas ou desmarcadas. Justificativas usam a data em que a alteração foi registrada. Os novos indicadores acompanham as ações registradas a partir desta versão; dados antigos não permitem inferir atendimentos ou cancelamentos anteriores.
+
+## Migrações e validação do banco
+
+Em banco novo, execute `schema.sql`, `003_recurring_appointments.sql` e `004_staff_schedule.sql`, nessa ordem. Em banco existente que já possui a recorrência, execute somente `004_staff_schedule.sql`. A migração 004 preserva as aulas e converte as sequências existentes em programações sem término.
+
+Alternativamente, `004_apply_and_verify.sql` aplica a migração 004 e executa os testes de integração antes do commit. Os dados dos testes são revertidos com savepoint. `tests/staff.integration.sql` repete a verificação com rollback em um banco já migrado. O script valida dias fixos, conflitos, recorrência até 2040, substituições, justificativas, indicadores, histórico e encerramento. Todas as tabelas e funções exigem autorização de funcionário; eventos são produzidos pelo banco e não podem ser inseridos ou alterados diretamente pela interface.

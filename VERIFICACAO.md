@@ -40,3 +40,11 @@ O último comando usa a rede e verifica o projeto configurado em config.js. Os t
 - Migração `003_recurring_appointments.sql` aplicada ao Supabase de produção.
 - Teste transacional sob a função `authenticated`, com identidade de funcionário autorizado, confirmou criação de três aulas, deslocamento da sequência em uma semana, preservação de `created_by`, rejeição de duplicidade com atomicidade, edição individual e exclusão por sequência. Todo o teste foi encerrado com rollback.
 - `npm run check`, `npm test` (10 testes) e `npm run build` concluídos com sucesso.
+
+## Painel da equipe e recorrência sem término — 19/10/2026
+
+- Migração 004 aplicada com testes na mesma transação, com papel authenticated e identidade de funcionário autorizado. Professores, dias fixos, aulas e eventos de teste foram revertidos antes do commit da estrutura.
+- Validados: conflito entre dias fixos, programação sem término e consultas até 2040 sem materializar milhares de aulas, desmarcação individual sem regeneração, substituição com justificativa, reagendamento, atendimento, indicadores por professor, edição de todas as agendadas sem alterar atendimentos/desmarcações e encerramento da sequência.
+- 14 testes automatizados passaram; sintaxe e build verificados.
+- Interface verificada em demonstração isolada no navegador: sugestão de professor por dia, substituição justificada, criação semanal sem campo de término, cadastro com dias ocupados desabilitados, reagendamento individual, confirmação de atendimento, contadores do painel e justificativas recentes.
+- Os professores existentes ficam sem dias definidos até a equipe configurá-los. Nenhum atendimento histórico foi presumido automaticamente.
